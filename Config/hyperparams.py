@@ -3,6 +3,7 @@ class HyperParams:
     middle_num_units = 128
 
     dropout_rate = 0.1
+    learning_rate = 0.0001
     kernel_size = 5
 
     logdir = 'logdir'

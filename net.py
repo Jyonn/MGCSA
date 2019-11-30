@@ -2,6 +2,7 @@ import datetime
 import os
 
 from Base.crazy_data import CrazyData
+from Base.evaluator import Evaluator
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
@@ -124,14 +125,14 @@ class Net:
                 candidates[index], fquv[index]), [hp.Data.candidate_num])
                 for index in range(batch_size)]  # [batch_size, candidate_num]
             self.logits = tf.reshape(tf.concat(logits, axis=0), [batch_size, hp.Data.candidate_num])
-            prediction = tf.to_int32(tf.argmax(logits, axis=-1))
 
         with tf.variable_scope('scoring'):
-            ranks = tf.nn.top_k(logits, k=hp.Data.candidate_num)
-
-
-        self.accuracy = tf.reduce_mean(tf.to_float(tf.equal(prediction, self.ANS_ID)))
-        # tf.reduce_mean()
+            self.evaluator = Evaluator(self.logits, self.ANS_ID)
+            self.accuracy = self.evaluator.get_top_x(1)
+            self.pAt1 = self.accuracy
+            self.pAt5 = self.evaluator.get_top_x(5)
+            self.mrr = self.evaluator.get_mrr()
+            self.meanRank = self.evaluator.get_mean_rank()
 
         if is_training:
             self.y_smoothed = label_smoothing(tf.one_hot(self.ANS_ID, depth=hp.Data.candidate_num))
@@ -140,7 +141,7 @@ class Net:
             self.mean_loss = tf.reduce_sum(self.loss)
 
             self.global_step = tf.Variable(0, name='global_step', trainable=False)
-            self.optimizer = tf.train.AdamOptimizer(learning_rate=0.0001, beta2=0.98)
+            self.optimizer = tf.train.AdamOptimizer(learning_rate=hp.learning_rate, beta2=0.98)
             self.train_operation = self.optimizer.minimize(
                 self.mean_loss, global_step=self.global_step)
 
@@ -149,7 +150,7 @@ if __name__ == '__main__':
     hp = HyperParams()
     loader = DataLoader(hp, mode='train')
     crazyData = CrazyData(
-        pid='wzgE', ticket='iKdE5ycrTBzpESR7brvX4uJQN4kBdJsS9iSuTVWsygdAnM8YHTEEqQ3Fu9ugT9lp')
+        pid='ZFax', ticket='3Wy10a2HuUjiSDRA3jd4NWfwYRZH1lRzdvIMqutec47ELj2WzW3QwKbPkWM0ASSW')
 
     tf.reset_default_graph()
 
