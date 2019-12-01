@@ -88,6 +88,16 @@ class DataLoader:
         video_feature = pkl.loads(self.rdb.get(record['video_feature']), encoding='latin1')
         return video_feature['vgg'], video_feature['c3d'], embedded_dialog, embedded_candidate, dialog_answer
 
+    def load_readable_record(self, record_id):
+        record = self.rdb.get(self.mode + str(record_id))
+        record = pkl.loads(record)
+
+        dialog = list(map(self.load_answer, record['dialog']))
+        candidate = [_turn[2] for _turn in dialog]
+        answer = [_turn[3] for _turn in dialog]
+        dialog = [_turn[:2] for _turn in dialog]
+        return dialog, candidate, answer
+
     def get_dialog_turns(self):
         def load_answer(turn):
             answer = pkl.loads(self.rdb.get('a{0}'.format(turn[1])), encoding='latin1')[0]
@@ -201,7 +211,3 @@ class DataLoader:
                     self.hp.Data.word_feature_num])
 
                 yield VGG, C3D, DLG_HISTORY, QUE, ANS, CAN[turn_num], ANS_ID[turn_num], turn_nums
-
-    # def get_batch_data(self):
-    #     for batch_data in self._get_batch_data():
-    #         return batch_data
