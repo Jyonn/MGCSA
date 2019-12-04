@@ -9,6 +9,8 @@ class HyperParams:
     logdir = 'logdir'
 
     class Data:
+        vocab_size = 2113
+
         redis_host = 'localhost'
         redis_port = '1120'
         word_file = './Data/words.txt'

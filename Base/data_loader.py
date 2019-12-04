@@ -46,7 +46,7 @@ class DataLoader:
             return [PAD] * max_len
         words = sentence.split(' ')
         words = list(map(lambda w: self.word2idx.get(w) or UNK, words))
-        words.insert(0, BEG)
+        # words.insert(0, BEG)
         words = words[:max_len - 1]
         words.append(END)
         words.extend([PAD] * (max_len - len(words)))
@@ -70,15 +70,27 @@ class DataLoader:
 
     def load_record(self, record_id):
 
+        def enid(turn):
+            return list(map(
+                lambda s: self.encode_sentence(s, self.hp.Data.max_words_per_sentence_len), turn))
+
         def embedding(turn):
             sentences = list(map(
                 lambda s: self.encode_sentence(s, self.hp.Data.max_words_per_sentence_len), turn))
-            return [list(map(lambda i: self.word_embedding[i], sentence)) for sentence in sentences]
+            # return [list(map(lambda i: self.word_embedding[i], sentence))
+            # for sentence in sentences]
+            return [self.word_embedding[sentence] for sentence in sentences]
+
+        def get_length(turn):
+            return list(map(lambda s: len(s.split(' ')) + 1, turn))
 
         record = self.rdb.get(self.mode + str(record_id))
         record = pkl.loads(record)
 
         dialog = list(map(self.load_answer, record['dialog']))
+        enid_dialog = [enid(_turn[:2]) for _turn in dialog]
+        len_dialog = [get_length(_turn[:2]) for _turn in dialog]
+        raw_que = [_turn[0] for _turn in dialog]
         embedded_dialog = [embedding(_turn[:2]) for _turn in dialog]
         embedded_dialog = np.vstack(embedded_dialog)
         dialog_candidate = [embedding(_turn[2]) for _turn in dialog]
@@ -86,7 +98,8 @@ class DataLoader:
         embedded_candidate = np.vstack(dialog_candidate)
 
         video_feature = pkl.loads(self.rdb.get(record['video_feature']), encoding='latin1')
-        return video_feature['vgg'], video_feature['c3d'], embedded_dialog, embedded_candidate, dialog_answer
+        return (video_feature['vgg'], video_feature['c3d'],
+                embedded_dialog, embedded_candidate, dialog_answer, enid_dialog, len_dialog, raw_que)
 
     def load_readable_record(self, record_id):
         record = self.rdb.get(self.mode + str(record_id))
@@ -151,16 +164,22 @@ class DataLoader:
             dlg_list = []
             can_list = []
             ans_list = []
+            enid_list = []
+            len_list = []
+            raw_list = []
 
             current_batch_size = 0
             for record_id in record_ids:
                 current_batch_size += 1
-                vgg, c3d, dialog, candidate, answer = self.load_record(record_id)
+                vgg, c3d, dialog, candidate, answer, enid_dlg, len_dlg, raw_que = self.load_record(record_id)
                 vgg_list.append(vgg)
                 c3d_list.append(c3d)
                 dlg_list.append(dialog)
                 can_list.append(candidate)
                 ans_list.append(answer)
+                enid_list.append(enid_dlg)
+                len_list.append(len_dlg)
+                raw_list.append(raw_que)
 
             VGG = np.array(vgg_list, dtype=np.float32).reshape([
                 current_batch_size, self.hp.Data.vgg_frames, self.hp.Data.vgg_feature_num])
@@ -172,6 +191,14 @@ class DataLoader:
                 self.hp.Data.max_words_per_sentence_len,
                 self.hp.Data.word_feature_num])
             DLG = np.split(DLG, turn_nums * 2, axis=1)
+            ENID_DLG = np.array(enid_list, dtype=np.int32).reshape([
+                current_batch_size,
+                turn_nums * 2,
+                self.hp.Data.max_words_per_sentence_len])
+            ENID_DLG = np.split(ENID_DLG, turn_nums * 2, axis=1)
+            LEN_DLG = np.array(len_list, dtype=np.int32).reshape([
+                current_batch_size, turn_nums * 2])
+            LEN_DLG = np.split(LEN_DLG, turn_nums * 2, axis=1)
 
             CAN = np.array(can_list, dtype=np.float32).reshape([
                 current_batch_size,
@@ -209,5 +236,11 @@ class DataLoader:
                     current_batch_size,
                     self.hp.Data.max_words_per_sentence_len,
                     self.hp.Data.word_feature_num])
+                ENID_QUE = np.reshape(ENID_DLG[turn_num * 2], [
+                    current_batch_size,
+                    self.hp.Data.max_words_per_sentence_len])
+                LEN_QUE = np.reshape(LEN_DLG[turn_num * 2], [current_batch_size])
+                RAW_QUE = [que[turn_num] for que in raw_list]
 
-                yield VGG, C3D, DLG_HISTORY, QUE, ANS, CAN[turn_num], ANS_ID[turn_num], turn_nums
+                yield (VGG, C3D, DLG_HISTORY, QUE, ENID_QUE, LEN_QUE, RAW_QUE,
+                       ANS, CAN[turn_num], ANS_ID[turn_num])

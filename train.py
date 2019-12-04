@@ -25,11 +25,12 @@ with tf.Session(config=config) as sess:
     sess.run(tf.global_variables_initializer())
 
     saver = tf.train.Saver()
+    saver.restore(sess, os.path.join(hp.logdir, 'epoch1.ckpt'))
 
-    for epoch in range(hp.epoch):
+    for epoch in range(2, hp.epoch):
         index = 0
         print('epoch', epoch)
-        for VGG, C3D, HIS, QUE, ANS, CAN, ANS_ID, turn_nums in loader.get_batch_data():
+        for VGG, C3D, HIS, QUE, ENID_QUE, LEN_QUE, RAW_QUE, ANS, CAN, ANS_ID in loader.get_batch_data():
             _, mean_loss, pAt1, pAt5, mrr, meanRank = sess.run(
                 (n.train_operation, n.mean_loss, n.pAt1, n.pAt5, n.mrr, n.meanRank), feed_dict={
                     n.VGG: VGG,
