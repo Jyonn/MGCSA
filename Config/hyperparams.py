@@ -7,6 +7,7 @@ class HyperParams:
     kernel_size = 5
 
     logdir = 'logdir'
+    project = 'origin'
 
     class Data:
         vocab_size = 2113

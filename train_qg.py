@@ -13,8 +13,8 @@ from net_qg import Net
 os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
 loader = DataLoader(hp, mode='train')
-# crazyData = CrazyData(
-#     pid='lUGI', ticket='80Hv3zUI6v3jbwj4o3SgZZ7evkXedZE8FxI472GuLoeoiqwCeFjZHwBexBYgxos5')
+crazyData = CrazyData(
+    pid='lUGI', ticket='80Hv3zUI6v3jbwj4o3SgZZ7evkXedZE8FxI472GuLoeoiqwCeFjZHwBexBYgxos5')
 
 tf.reset_default_graph()
 
@@ -26,22 +26,24 @@ with tf.Session(config=config) as sess:
     sess.run(tf.global_variables_initializer())
 
     saver = tf.train.Saver()
+    saver.restore(sess, os.path.join(hp.logdir, 'epoch0.ckpt'))
 
-    for epoch in range(hp.epoch):
+    for epoch in range(1, hp.epoch):
         index = 0
         output = None
         print('epoch', epoch)
-        for VGG, C3D, HIS, QUE, ENID_QUE, LEN_QUE, RAW_QUE, ANS, CAN, ANS_ID in loader.get_batch_data():
+        for VGG, C3D, HIS, LAST_QUE, ENID_QUE, LEN_QUE, RAW_QUE in loader.get_batch_data():
             last_output = output  # type: np.ndarray
             _, loss, pred_question, output = sess.run(
-                (n.train_operation, n.loss, n.pred_question, n.lstm_output), feed_dict={
+                (n.train_operation, n.loss, n.pred_question, n.rnn_output), feed_dict={
             # masks, max_question_length = sess.run(
             #     (n.masks, n.max_question_length), feed_dict={
                     n.VGG: VGG,
                     n.C3D: C3D,
                     n.HIS: HIS,
                     n.ENID_QUE: ENID_QUE,
-                    n.LEN_QUE: LEN_QUE
+                    n.LEN_QUE: LEN_QUE,
+                    n.LAST_QUE: LAST_QUE,
                 })
 
             # print(masks)
@@ -53,20 +55,11 @@ with tf.Session(config=config) as sess:
                     pred = pred[:pred.index(END)]
                 print('human:', RAW_QUE[0])
                 print('model:', ' '.join([loader.idx2word[id_] for id_ in pred]))
-                if index:
-                    last = json.dumps(last_output.tolist())
-                    current = json.dumps(output.tolist())
-                    with open('last-output.txt', 'wb+') as f:
-                        f.write(last.encode())
-                    with open('current-output.txt', 'wb+') as f:
-                        f.write(current.encode())
-                    print('save output at', index)
-                    # print('same?:', (last_output == output).all())
                 print(str(datetime.datetime.now()),
                       'index:', index,
                       'loss:', loss)
-                # crazyData.push([
-                #     dict(label='loss', value=int(loss * 1000))])
+                crazyData.push([
+                    dict(label='loss@e%s' % epoch, value=int(loss * 1000))])
             index += 1
         print('total index', index, 'start saving!')
         saver.save(sess, os.path.join(hp.logdir, 'epoch{0}.ckpt'.format(epoch)))

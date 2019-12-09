@@ -191,6 +191,7 @@ class DataLoader:
                 self.hp.Data.max_words_per_sentence_len,
                 self.hp.Data.word_feature_num])
             DLG = np.split(DLG, turn_nums * 2, axis=1)
+
             ENID_DLG = np.array(enid_list, dtype=np.int32).reshape([
                 current_batch_size,
                 turn_nums * 2,
@@ -228,6 +229,10 @@ class DataLoader:
                 empty_matrix = np.tile(empty_sentence, [
                     1, self.hp.Data.max_turn_per_dialog_len * 2 - turn_num * 2, 1, 1])
                 DLG_HISTORY = np.concatenate([DLG_HISTORY, empty_matrix], axis=1)
+                LAST_QUE = np.reshape(DLG[turn_num * 2], [
+                    current_batch_size,
+                    self.hp.Data.max_words_per_sentence_len,
+                    self.hp.Data.word_feature_num])
                 QUE = np.reshape(DLG[turn_num * 2], [
                     current_batch_size,
                     self.hp.Data.max_words_per_sentence_len,
@@ -242,5 +247,7 @@ class DataLoader:
                 LEN_QUE = np.reshape(LEN_DLG[turn_num * 2], [current_batch_size])
                 RAW_QUE = [que[turn_num] for que in raw_list]
 
-                yield (VGG, C3D, DLG_HISTORY, QUE, ENID_QUE, LEN_QUE, RAW_QUE,
-                       ANS, CAN[turn_num], ANS_ID[turn_num])
+                if self.hp.project == 'origin':
+                    yield (VGG, C3D, DLG_HISTORY, QUE, ANS, CAN[turn_num], ANS_ID[turn_num])
+                else:
+                    yield (VGG, C3D, DLG_HISTORY, LAST_QUE, ENID_QUE, LEN_QUE, RAW_QUE)
