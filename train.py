@@ -1,8 +1,6 @@
 import datetime
 import os
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '3'
-
 import tensorflow as tf
 
 from Base.crazy_data import CrazyData
@@ -10,10 +8,12 @@ from Base.data_loader import DataLoader
 from Config.hyperparams import HyperParams
 from net import Net
 
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+
 hp = HyperParams()
 loader = DataLoader(hp, mode='train')
 crazyData = CrazyData(
-    pid='cGZH', ticket='WPApHihXtlxL8xo7IEZQ9d2PCxhkOqhb1qJzt0eXYCxRqlNAKmvPwrbgGmQ3aNv1')
+    pid='jCou', ticket='e0Tr5orRjqYpZ5754CkLKxjgt38nCAG3cD7cSl774lPXC2qjN0AFjRztOXkoxONc')
 
 tf.reset_default_graph()
 
@@ -25,9 +25,9 @@ with tf.Session(config=config) as sess:
     sess.run(tf.global_variables_initializer())
 
     saver = tf.train.Saver()
-    saver.restore(sess, os.path.join(hp.logdir, 'epoch1.ckpt'))
+    saver.restore(sess, os.path.join(hp.logdir, 'epoch3.ckpt'))
 
-    for epoch in range(2, hp.epoch):
+    for epoch in range(4, hp.epoch):
         index = 0
         print('epoch', epoch)
         for VGG, C3D, HIS, QUE, ANS, CAN, ANS_ID in loader.get_batch_data():
@@ -50,8 +50,11 @@ with tf.Session(config=config) as sess:
                       'mrr:', mrr,
                       'mr', meanRank)
                 crazyData.push([
-                    dict(label='loss', value=int(mean_loss * 1000)),
-                    dict(label='accuracy', value=int(pAt1 * 10000))
+                    dict(label='loss@e%s' % epoch, value=int(mean_loss * 1000)),
+                    dict(label='pAt1@e%s' % epoch, value=int(pAt1 * 10000)),
+                    dict(label='pAt5@e%s' % epoch, value=int(pAt5 * 10000)),
+                    dict(label='mrr@e%s' % epoch, value=int(mrr * 10000)),
+                    dict(label='meanRank@e%s' % epoch, value=int(meanRank * 1000)),
                 ])
             index += 1
         print('total index', index, 'start saving!')

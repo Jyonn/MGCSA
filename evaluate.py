@@ -2,11 +2,11 @@ import os
 
 import tensorflow as tf
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
-
 from Base.data_loader import DataLoader
 from Config.hyperparams import HyperParams
 from net import Net
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
 hp = HyperParams()
 loader = DataLoader(hp, mode='test')
@@ -20,7 +20,7 @@ with tf.Session(config=config) as sess:
     sess.run(tf.global_variables_initializer())
 
     saver = tf.train.Saver()
-    saver.restore(sess, os.path.join(hp.logdir, 'epoch5.ckpt'))
+    saver.restore(sess, os.path.join(hp.logdir, 'epoch3.ckpt'))
 
     index = 0
     total_loss = 0
@@ -30,7 +30,7 @@ with tf.Session(config=config) as sess:
     total_meanRank = 0
     print('batch size:', hp.Data.batch_size)
 
-    for VGG, C3D, HIS, QUE, ENID_QUE, LEN_QUE, RAW_QUE, ANS, CAN, ANS_ID in loader.get_batch_data():
+    for VGG, C3D, HIS, QUE, ANS, CAN, ANS_ID in loader.get_batch_data():
         mean_loss, pAt1, pAt5, mrr, meanRank = sess.run(
             (n.mean_loss, n.pAt1, n.pAt5, n.mrr, n.meanRank), feed_dict={
                 n.VGG: VGG,

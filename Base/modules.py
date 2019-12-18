@@ -337,7 +337,8 @@ def scaled_dotproduct_attention(queries, keys,
                                 is_training=True,
                                 using_mask=False,
                                 scope="scaled_dotproduct_attention",
-                                reuse=None):
+                                reuse=None,
+                                num_units=None):
     """Applies multihead attention.
 
     Args:
@@ -356,13 +357,14 @@ def scaled_dotproduct_attention(queries, keys,
     """
     with tf.variable_scope(scope, reuse=reuse):
         # print(queries.get_shape()[-1])
-        num_units = queries.get_shape()[-1]
+        query_num_units = queries.get_shape()[-1]
+        num_units = num_units or query_num_units
 
         # Linear projection
         # 线性变换得到Q K V
         Q = tf.layers.dense(queries, num_units, activation=tf.nn.relu)  #
         K = tf.layers.dense(keys, num_units, activation=tf.nn.relu)  #
-        V = tf.layers.dense(keys, num_units, activation=tf.nn.relu)  #
+        V = tf.layers.dense(keys, query_num_units, activation=tf.nn.relu)  #
 
         outputs = tf.matmul(Q, tf.transpose(K, [0, 2, 1]))
         outputs = outputs / (K.get_shape().as_list()[-1] ** 0.5)
@@ -443,4 +445,4 @@ def temporal_attention(inputs: tf.Tensor,
             tf.expand_dims(attention_distribution, axis=-1), [1, 1, num_units])
         outputs = tf.reduce_sum(tf.multiply(attention_distribution, inputs), axis=1)
 
-    return outputs  # [batch_size, q_num_units]
+    return outputs  # [batch_size, num_units]

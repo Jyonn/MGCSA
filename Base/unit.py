@@ -5,7 +5,9 @@ from Config.hyperparams import HyperParams as hp
 
 
 def mgsca_unit(inputs: tf.Tensor,
+               kernel_size,
                scope='MGSCA_Unit',
+               num_units=None,
                reuse=None,
                is_training=True,
                with_positional_encoding=True,
@@ -13,6 +15,7 @@ def mgsca_unit(inputs: tf.Tensor,
     """
     MGSCA Unit
 
+    :param kernel_size:
     :param num_units: num_units
     :param with_positional_encoding: using positional encoding
     :param is_training: Boolean. Controller of mechanism for dropout.
@@ -39,23 +42,24 @@ def mgsca_unit(inputs: tf.Tensor,
             encoded = tf.layers.dropout(encoded, rate=hp.dropout_rate,
                                         training=tf.convert_to_tensor(is_training))
 
-        assert feature_num % hp.kernel_size == 0
-        encoded = tf.reshape(encoded, [-1, hp.kernel_size, embedding_length])
+        assert feature_num % kernel_size == 0
+        encoded = tf.reshape(encoded, [-1, kernel_size, embedding_length])
 
         y = scaled_dotproduct_attention(queries=encoded,
                                         keys=encoded,
                                         dropout_rate=hp.dropout_rate,
                                         is_training=is_training,
                                         using_mask=using_mask,
-                                        reuse=tf.AUTO_REUSE)
+                                        reuse=tf.AUTO_REUSE,
+                                        num_units=num_units)
 
         y = tf.reshape(y, [-1, feature_num, embedding_length])
         # [batch_size, feature_num, hp.num_units]
 
         p = tf.layers.conv1d(y,
                              filters=embedding_length,
-                             kernel_size=hp.kernel_size,
-                             strides=hp.kernel_size,
+                             kernel_size=kernel_size,
+                             strides=kernel_size,
                              reuse=tf.AUTO_REUSE)
         # [batch_size, kernel_num, embedding_length]
 
@@ -65,11 +69,12 @@ def mgsca_unit(inputs: tf.Tensor,
                                          is_training=is_training,
                                          using_mask=False,
                                          scope='att_forwarded',
-                                         reuse=tf.AUTO_REUSE)
+                                         reuse=tf.AUTO_REUSE,
+                                         num_units=num_units)
         # [batch_size, kernel_num, embedding_length]
 
         z2 = fusion(p, p2, reuse=tf.AUTO_REUSE)
-        z = tf.tile(z2, [1, hp.kernel_size, 1])
+        z = tf.tile(z2, [1, kernel_size, 1])
         fyz = fusion(y, z, reuse=tf.AUTO_REUSE)
         r = fusion(fyz, inputs, reuse=tf.AUTO_REUSE)
         # fusioned = tf.layers.dense(fusioned, num_units or hp.num_units, reuse=tf.AUTO_REUSE)

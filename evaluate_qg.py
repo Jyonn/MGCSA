@@ -1,13 +1,15 @@
+import json
 import os
 
 from nltk.translate.bleu_score import sentence_bleu
 import tensorflow as tf
 
 from Base.data_loader import DataLoader, END
-from Config.qg_hp import qg_hp as hp
+from Config.qg_hp import qg_hp_TACoS as hp
 from net_qg import Net
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+epoch = 3
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 loader = DataLoader(hp, mode='test')
 
@@ -20,7 +22,7 @@ with tf.Session(config=config) as sess:
     sess.run(tf.global_variables_initializer())
 
     saver = tf.train.Saver()
-    saver.restore(sess, os.path.join(hp.logdir, 'epoch4.ckpt'))
+    saver.restore(sess, os.path.join(hp.logdir, 'epoch%s.ckpt' % epoch))
 
     index = 0
     total_loss = 0
@@ -28,6 +30,9 @@ with tf.Session(config=config) as sess:
     not_good_index = 0
     bleus = [0, 0, 0, 0]
     print('batch size:', hp.Data.batch_size)
+    ans_dict = {}
+    pred_dict = {}
+    eval_index = 0
 
     for VGG, C3D, HIS, LAST_QUE, ENID_QUE, LEN_QUE, RAW_QUE in loader.get_batch_data():
         loss, pred_question = sess.run(
@@ -51,11 +56,15 @@ with tf.Session(config=config) as sess:
             bleu_reference = RAW_QUE[b].split(' ')
 
             for bleu_index in range(4):
-                weights = [0.0] * bleu_index + [1.0] + [0.0] * (3 - bleu_index)
+                weights = [1/(bleu_index+1)] * (bleu_index+1) + [0.0] * (3-bleu_index)
                 current_bleus[bleu_index] += sentence_bleu(
                     [bleu_reference], bleu_candidate, weights=weights)
 
             pred_str = ' '.join(bleu_candidate)
+
+            ans_dict[str(eval_index)] = [RAW_QUE[b]]
+            pred_dict[str(eval_index)] = [pred_str]
+            eval_index += 1
             if RAW_QUE[b] == pred_str:
                 accuracy += 1
             else:
@@ -88,3 +97,8 @@ with tf.Session(config=config) as sess:
     print('accuracy:', total_accuracy / index)
     print('bleus', bleus)
 
+    with open('Eval/examples/%sepoch%sgts.json' % (hp.dataset, epoch), 'wb+') as f:
+        f.write(json.dumps(ans_dict).encode())
+
+    with open('Eval/examples/%sepoch%sres.json' % (hp.dataset, epoch), 'wb+') as f:
+        f.write(json.dumps(pred_dict).encode())

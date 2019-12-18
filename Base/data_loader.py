@@ -6,8 +6,10 @@ import pickle as pkl
 import numpy as np
 
 from Config.hyperparams import HyperParams
-from Data.train_dialog_turns import len_matrix as train_len_matrix
-from Data.test_dialog_turns import len_matrix as test_len_matrix
+from Data.TACoS.train_dialog_turns import len_matrix as TACoS_train_len_matrix
+from Data.TACoS.test_dialog_turns import len_matrix as TACoS_test_len_matrix
+from Data.YoutubeClip.train_dialog_turns import len_matrix as YoutubeClip_train_len_matrix
+from Data.YoutubeClip.test_dialog_turns import len_matrix as YoutubeClip_test_len_matrix
 
 PAD = 0
 UNK = 1
@@ -20,7 +22,10 @@ class DataLoader:
         self.hp = hp
         self.mode = mode
 
-        self.len_matrix = train_len_matrix if mode == 'train' else test_len_matrix
+        if hp.dataset == 'TACoS':
+            self.len_matrix = TACoS_train_len_matrix if mode == 'train' else TACoS_test_len_matrix
+        else:
+            self.len_matrix = YoutubeClip_train_len_matrix if mode == 'train' else YoutubeClip_test_len_matrix
 
         self.word2idx, self.idx2word, self.word_len = self.load_words()
         self.word_embedding = self.load_word_embedding()
@@ -109,7 +114,8 @@ class DataLoader:
         candidate = [_turn[2] for _turn in dialog]
         answer = [_turn[3] for _turn in dialog]
         dialog = [_turn[:2] for _turn in dialog]
-        return dialog, candidate, answer
+        question = [_turn[0] for _turn in dialog]
+        return dialog, candidate, answer, question
 
     def get_dialog_turns(self):
         def load_answer(turn):
@@ -125,12 +131,15 @@ class DataLoader:
 
         len_matrix = [[]] * self.hp.Data.max_turn_per_dialog_len
         for index, l in enumerate(lens):
+            if l >= self.hp.Data.max_turn_per_dialog_len:
+                print('too long dialog', index, l)
+                continue
             if len_matrix[l]:
                 len_matrix[l].append(index)
             else:
                 len_matrix[l] = [index]
 
-        with open('./Data/{0}_dialog_turns.py'.format(self.mode), 'wb+') as f:
+        with open('./Data/{1}/{0}_dialog_turns.py'.format(self.mode, self.hp.dataset), 'wb+') as f:
             s = json.dumps(len_matrix)
             s = s.replace('null', 'None')
             s = 'len_matrix = {0}'.format(s)
@@ -140,15 +149,28 @@ class DataLoader:
     def get_total_batches(self, keep_remainder=True, length_above=1):
         total_batches = 0
         for length in range(length_above, self.hp.Data.max_turn_per_dialog_len):
-            total_batches += len(self.len_matrix[length]) // self.hp.Data.batch_size
+            current_batches = len(self.len_matrix[length]) // self.hp.Data.batch_size
             if keep_remainder and len(self.len_matrix[length]) % self.hp.Data.batch_size:
-                total_batches += 1
+                current_batches += 1
+            current_batches *= length - 1
+            total_batches += current_batches
         return total_batches
 
     def get_record_ids(self, keep_remainder=True, length_above=1):
         batch_size = self.hp.Data.batch_size
-        for turn_num in range(length_above, self.hp.Data.max_turn_per_dialog_len):
+        print_it = True
+        # if self.mode == 'train':
+        turn_range = range(length_above, self.hp.Data.max_turn_per_dialog_len)
+        # else:
+        #     turn_range = range(length_above, length_above+1)
+        for turn_num in turn_range:
             lens = len(self.len_matrix[turn_num])
+            if print_it:
+                print('randomize... [:10]', self.len_matrix[turn_num][:10])
+            random.shuffle(self.len_matrix[turn_num])
+            if print_it:
+                print('randomization finished. ', self.len_matrix[turn_num][:10])
+                print_it = False
             batch_num = lens // batch_size
             if keep_remainder and lens % batch_size:
                 batch_num += 1
@@ -156,6 +178,55 @@ class DataLoader:
                 index_start = batch_size * batch_index
                 index_end = min(batch_size * (batch_index + 1), lens)
                 yield turn_num, self.len_matrix[turn_num][index_start:index_end]
+
+    def get_readable_batch(self):
+        for turn_nums, record_ids in self.get_record_ids(length_above=2, keep_remainder=False):
+            dlg_list = []
+            can_list = []
+            ans_list = []
+            que_list = []
+
+            current_batch_size = 0
+            for record_id in record_ids:
+                current_batch_size += 1
+                dialog, candidate, answer, question = self.load_readable_record(record_id)
+                dialog_ = []
+                for turn in dialog:
+                    dialog_.append(turn[0])
+                    dialog_.append(turn[1])
+                dlg_list.append(dialog_)
+                can_list.append(candidate)
+                ans_list.append(answer)
+                que_list.append(question)
+
+            DLG = []
+            for sentence_num in range(turn_nums * 2):
+                TURN_DLG = []
+                for batch_num in range(current_batch_size):
+                    TURN_DLG.append(dlg_list[batch_num][sentence_num])
+                DLG.append(TURN_DLG)
+
+            CAN = []
+            ANS = []
+            QUE = []
+            for turn_num in range(turn_nums):
+                TURN_CAN = []
+                TURN_ANS = []
+                TURN_QUE = []
+                for batch_num in range(current_batch_size):
+                    TURN_CAN.append(can_list[batch_num][turn_num])
+                    TURN_ANS.append(ans_list[batch_num][turn_num])
+                    TURN_QUE.append(que_list[batch_num][turn_num])
+                CAN.append(TURN_CAN)
+                ANS.append(TURN_ANS)
+                QUE.append(TURN_QUE)
+
+            for turn_num in range(1, turn_nums):
+                CRT_DLG = DLG[:turn_num * 2]
+                LAST_QUE = DLG[turn_num * 2 - 2]
+                QUE = DLG[turn_num * 2]
+
+                yield CRT_DLG, LAST_QUE, QUE
 
     def get_batch_data(self):
         for turn_nums, record_ids in self.get_record_ids(length_above=2, keep_remainder=False):
@@ -229,7 +300,7 @@ class DataLoader:
                 empty_matrix = np.tile(empty_sentence, [
                     1, self.hp.Data.max_turn_per_dialog_len * 2 - turn_num * 2, 1, 1])
                 DLG_HISTORY = np.concatenate([DLG_HISTORY, empty_matrix], axis=1)
-                LAST_QUE = np.reshape(DLG[turn_num * 2], [
+                LAST_QUE = np.reshape(DLG[turn_num * 2 - 2], [
                     current_batch_size,
                     self.hp.Data.max_words_per_sentence_len,
                     self.hp.Data.word_feature_num])
@@ -251,3 +322,10 @@ class DataLoader:
                     yield (VGG, C3D, DLG_HISTORY, QUE, ANS, CAN[turn_num], ANS_ID[turn_num])
                 else:
                     yield (VGG, C3D, DLG_HISTORY, LAST_QUE, ENID_QUE, LEN_QUE, RAW_QUE)
+
+    def get_fake_batch_data(self):
+        data = None
+        for data in self.get_batch_data():
+            break
+        for _ in range(100000):
+            yield data
